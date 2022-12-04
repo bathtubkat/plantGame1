@@ -13,7 +13,7 @@ class EventEmitter {
 //set message with payload
     emit(message, payload = null) {
     if(this.listeners[message]) {
-     this.listeners[message].forEach(1 (message,payload));
+     this.listeners[message].forEach( (l) => l(message, payload));
     }
 }};
 
@@ -27,33 +27,31 @@ const messages = {
 
 const eventEmitter = new EventEmitter();
 
-let onKeyDown = function(e) {
-    console.log(e.keyCode);
-    switch (e.keyCode) {
-        case 37:
-        case 38:
-        case 39:
-        case 40:
-        case 32: 
-        e.preventDefault();
-        break;
-        default:
-        break;
-    }
-};
-
-window.addEventListener("keydown", onKeyDown);
-window.addEventListener("keyup", (evt) => {
-    if (evt.key === "ArrowLeft") {
-        eventEmitter.emit(messages.MOVE_LEFT);
-    } else if (evt.key === "ArrowRight") {
-        eventEmitter.emit(Messages.MOVE_RIGHT);
-      } else if (evt.key === "ArrowUp") {
-        eventEmitter.emit(Messages.MOVE_UP);
-      } else if (evt.key === "ArrowDown") {
-        eventEmitter.emit(Messages.MOVE_DOWN);
-      }
-    });
+const keyDown = [];
+document.addEventListener('keydown', event => {
+  if(!keyDown.includes(event.key)){
+    keyDown.push(event.key);
+  }
+});
+document.addEventListener('keyup', event => {
+  if(keyDown.includes(event.key)){
+    keyDown.splice(keyDown.indexOf(event.key), 1);
+  }
+});
+function handleInput(keyDown){
+  if(keyDown.includes('ArrowLeft') || keyDown.includes('a')){
+    eventEmitter.emit(messages.MOVE_LEFT);
+  }
+  if(keyDown.includes('ArrowRight') || keyDown.includes('d')){
+    eventEmitter.emit(messages.MOVE_RIGHT);
+  }
+  if(keyDown.includes('ArrowUp') || keyDown.includes('w')){
+    eventEmitter.emit(messages.MOVE_UP);
+  }
+  if(keyDown.includes('ArrowDown') || keyDown.includes('s')){
+    eventEmitter.emit(messages.MOVE_DOWN);
+  }
+}
 
 function loadAsset(path) {
     return new Promise((resolve) => {
@@ -77,7 +75,16 @@ function loadAsset(path) {
         }
       
         draw(ctx) {
-          ctx.drawImage(this.img, this.x, this.y, this.width, this.height);
+          ctx.drawImage(
+            this.img,
+            0, //starting point on the x-axis of the image --- left of the image
+            0, //starting point on the y-axis --- top of the image
+            this.img.width,
+            this.img.height,
+            this.x, 
+            this.y, 
+            this.width, 
+            this.height);
         }
       
         clear(ctx) {}
@@ -89,6 +96,19 @@ function loadAsset(path) {
           (this.width = 200), (this.height = 200);
           this.type = "Water";
           this.speed = { x: 5, y: 5 };
+
+          eventEmitter.on(messages.MOVE_LEFT, () => {
+            this.x -= this.speed.x;
+          });
+          eventEmitter.on(messages.MOVE_RIGHT, () => {
+            this.x += this.speed.x;
+          });
+          eventEmitter.on(messages.MOVE_UP, () => {
+            this.y -= this.speed.y;
+          });
+          eventEmitter.on(messages.MOVE_DOWN, () => {
+            this.y += this.speed.y;
+          });
         }
         moveTo(x, y) {
           this.x = x;
@@ -136,82 +156,72 @@ function loadAsset(path) {
         }, 200);
       }
       
-      // use like so
-      window.onload = async () => {
-        canvas = document.getElementById("canvas");
-        ctx = canvas.getContext("2d");
-        waterImg = await loadAsset(
-        assets/water.png
-        );
-        seedImg = await loadAsset(
-        assets/seed.png        );
-        flowerImg = await loadAsset(
-        assets/flower.png        );
-        water.img = waterImg;
-        seed.img = seedImg;
-        flower.img = flowerImg;
-      
-        water.draw(ctx);
-        seed.draw(ctx);
-        flower.width = 400;
-        flower.height = 400;
-      
-        eventEmitter.on(Messages.MOVE_LEFT, () => {
-          water.x -= 20;
-          if (!intersectRect(water, seed)) {
-            water.draw(ctx);
-          }
-        });
-      
-        eventEmitter.on(Messages.MOVE_RIGHT, () => {
-          water.x += 20;
-          if (!intersectRect(water, seed)) {
-            water.draw(ctx);
-          }
-        });
-      
-        eventEmitter.on(Messages.MOVE_UP, () => {
-          water.y -= 20;
-          if (!intersectRect(water, seed)) {
-            water.draw(ctx);
-          }
-        });
-      
-        eventEmitter.on(Messages.MOVE_DOWN, () => {
-          water.y += 20;
-          if (!intersectRect(water, seed)) {
-            water.draw(ctx);
-          }
-        });
-      
-        eventEmitter.on(Messages.WATER_SEED_COLLISION, () => {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = "white";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          flower.draw(ctx);
-          window.removeEventListener("keyup", (evt) => {
-            if (evt.key === "ArrowLeft") {
-              eventEmitter.emit(Messages.water_MOVE_LEFT);
-            } else if (evt.key === "ArrowRight") {
-              eventEmitter.emit(Messages.water_MOVE_RIGHT);
-            } else if (evt.key === "ArrowUp") {
-              eventEmitter.emit(Messages.water_MOVE_UP);
-            } else if (evt.key === "ArrowDown") {
-              eventEmitter.emit(Messages.water_MOVE_DOWN);
-            }
+      const assetsToLoad = [
+        "./assets/flower.png", //flower
+        "./assets/seed.png", //seed
+        "./assets/water.png" //water
+      ];
+
+      document.addEventListener('DOMContentLoaded', event => {
+        const assets = [];
+        Promise.all(assetsToLoad.map(loadAsset)).then(images => { //once all images are loaded, add them to the available sources array
+          images.forEach(function(img){
+              assets.push(img);
           });
+          //what to do after images are loaded
+
+          canvas = document.getElementById("canvas");
+          canvas.width = 1000;
+          canvas.height = 1000;
+          ctx = canvas.getContext("2d");
+
+          water.img = assets[2];
+          seed.img = assets[1];
+          flower.img = assets[0];
+
+          water.draw(ctx);
+          seed.draw(ctx);
+          flower.width = 400;
+          flower.height = 400;
+
+          eventEmitter.on(messages.WATER_SEED_COLLISION, () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            flower.draw(ctx);
+            window.removeEventListener("keyup", (evt) => {
+              console.log('hi');
+              if (evt.key === "ArrowLeft") {
+                eventEmitter.emit(messages.MOVE_LEFT);
+              } else if (evt.key === "ArrowRight") {
+                eventEmitter.emit(messages.MOVE_RIGHT);
+              } else if (evt.key === "ArrowUp") {
+                eventEmitter.emit(messages.MOVE_UP);
+              } else if (evt.key === "ArrowDown") {
+                eventEmitter.emit(messages.MOVE_DOWN);
+              }
+            });
+          });
+
+          let gameLoop = setInterval(() => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            handleInput(keyDown);
+            if (intersectRect(water, seed)) {
+              eventEmitter.emit(messages.WATER_SEED_COLLISION);
+            } else {
+              water.draw(ctx);
+              seed.draw(ctx);
+            }
+          }, 16.66);
+          //end of game code
         });
+      });
+
+      // use like so
       
-        let gameLoop = setInterval(() => {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = "white";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          if (intersectRect(water, seed)) {
-            eventEmitter.emit(Messages.COLLISION_water_seed);
-          } else {
-            water.draw(ctx);
-            seed.draw(ctx);
-          }
-        }, 100);
-      };
+
+      
+
+      
+
       
